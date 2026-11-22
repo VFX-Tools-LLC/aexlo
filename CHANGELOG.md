@@ -9,6 +9,12 @@ may break the API, and every breaking change is listed below.
 
 ### Fixed
 
+- `aexlo worker` no longer loses the result of a run to a plugin whose library
+  hangs when it is unloaded (Lux's OpenImageDenoise CPU device joins its
+  thread pool from a static destructor, which cannot finish under the loader
+  lock `FreeLibrary` holds). The worker now answers first, unloads after, and
+  the client replaces a worker that does not confirm the unload within 5 s.
+  `PluginInstance::set_down` is `finish` without the unload.
 - The `aexlo` CLI no longer hangs at exit with a plugin that stops a thread of
   its own in an exit-time destructor (the aescripts license check in Wrap It 2
   and ProjectIt waited forever for a thread `ExitProcess` had already killed,

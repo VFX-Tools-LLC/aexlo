@@ -181,6 +181,57 @@ fn test_returns_for_a_plugin_that_hangs_at_process_exit() {
 	);
 }
 
+/// A plugin whose library hangs when the host unloads it (a destructor that
+/// joins a thread of its own, as Lux's denoiser does) must not cost the result
+/// of the run that started the thread, nor the run after it. The worker used to
+/// unload the plugin before it answered, so the finished render was lost to a
+/// timeout. Windows only: elsewhere `dlclose` runs no such deadlock.
+#[test]
+#[cfg(windows)]
+fn test_keeps_the_results_of_a_plugin_that_hangs_when_unloaded() {
+	let plugin = hang_on_unload_artifact();
+	let dir = scratch("unload_hang_test");
+	let manifest = manifest(
+		&dir,
+		&format!(
+			r#"
+[plugin]
+artifact = {}
+
+[defaults]
+size = [32, 24]
+checks = []
+golden = false
+
+[[preset]]
+name = "first"
+
+[[preset]]
+name = "second"
+"#,
+			toml_path(&plugin)
+		),
+	);
+	let run = aexlo_within(
+		LIMIT,
+		&["test", "--format", "json", "--manifest", manifest.to_str().unwrap()],
+		&dir,
+		&[],
+	);
+	assert!(!run.timed_out(), "test hung {}", run.describe());
+	assert_eq!(run.code(), Some(0), "{}", run.describe());
+	let report: serde_json::Value =
+		serde_json::from_str(&run.stdout).unwrap_or_else(|e| panic!("{e}: {}", run.describe()));
+	assert_eq!(
+		outcomes(&report),
+		[
+			("first".to_string(), "pass".to_string()),
+			("second".to_string(), "pass".to_string())
+		],
+		"{report:#}"
+	);
+}
+
 /// `AEXLO_CLEAN_EXIT=1` goes back to a returning `main`, which is how a
 /// plugin's own teardown is debugged: here that is the hang again.
 #[test]

@@ -473,18 +473,22 @@ pub fn run_owned(
 	result
 }
 
+/// Like [`run_owned`], but hands the set-down instance back instead of
+/// dropping it: dropping unloads the plugin's library, which can block for good
+/// in the plugin's own exit-time code (see [`PluginInstance::set_down`]), and
+/// the worker must report the result before that.
 pub(crate) fn run_owned_prepared(
 	mut fx: PluginInstance,
 	variant: &Variant,
 	options: &RunOptions,
 	sink: Option<CommandSink>,
-) -> Result<RunOutput, RunFailure> {
+) -> (Result<RunOutput, RunFailure>, PluginInstance) {
 	let mut result = run_on_impl(&mut fx, variant, options, sink, true);
-	let report = fx.finish();
+	let report = fx.set_down();
 	if let Ok(output) = &mut result {
 		output.strict.absorb(report);
 	}
-	result
+	(result, fx)
 }
 
 /// Runs variants in this process: debuggers and `dbg!` work, but a crash

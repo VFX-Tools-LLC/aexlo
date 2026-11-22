@@ -107,6 +107,12 @@ pub fn hang_on_exit_artifact() -> PathBuf {
 	cdylib_artifact("aexlo_hang_on_exit")
 }
 
+/// Build the effect whose library hangs when the host unloads it
+/// (`tests/hang_on_unload`).
+pub fn hang_on_unload_artifact() -> PathBuf {
+	cdylib_artifact("aexlo_hang_on_unload")
+}
+
 /// Build the cdylib package `package` and return a private copy of its library.
 fn cdylib_artifact(package: &str) -> PathBuf {
 	let status = std::process::Command::new(env!("CARGO"))
