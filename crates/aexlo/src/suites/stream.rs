@@ -8,7 +8,9 @@
 //! `PF_ParamDef`s, 0 being the input layer). aexlo has no timeline, so
 //! a stream's value is the parameter's current value at every time and it never
 //! has keyframes or expressions. `AEGP_SetStreamValue` writes a parameter's
-//! value, as a plugin's Reset button does. Mask streams, names that need the
+//! value, as a plugin's Reset button does. A mask's outline stream is served
+//! from the masks attached with [`PluginInstance::set_mask_paths`](crate::PluginInstance::set_mask_paths)
+//! (see [`super::mask_outline`]). Other mask streams, names that need the
 //! AEGP Memory Suite and every other write are refused with `A_Err_GENERIC`.
 //!
 //! The same handle also names a node in the layer's dynamic-stream tree
@@ -53,6 +55,9 @@ pub(crate) enum Node {
 	Effect,
 	/// `ADBE Mask Parade`. Always empty.
 	Masks,
+	/// `ADBE Mask Shape`, the outline of mask `index` (see
+	/// [`super::mask_outline`]).
+	MaskOutline,
 	/// A parameter of the hosted effect. `index` is the parameter index.
 	Param,
 }
@@ -116,6 +121,10 @@ pub(crate) enum StreamValue {
 	/// An arbitrary-data parameter. The handle is the parameter's own value,
 	/// not a copy, so disposing the stream value must not free it.
 	Arb(PF_ArbitraryH),
+	/// A mask's outline. Reading the value hands out an
+	/// `AEGP_MaskOutlineValH` the plugin must dispose of
+	/// ([`super::mask_outline::new_value`]), so it carries no payload here.
+	Mask,
 }
 
 impl StreamValue {
@@ -176,6 +185,7 @@ impl StreamValue {
 			Self::Color { .. } => AEGP_StreamType_COLOR,
 			Self::LayerId(_) => AEGP_StreamType_LAYER_ID,
 			Self::Arb(_) => AEGP_StreamType_ARB,
+			Self::Mask => AEGP_StreamType_MASK,
 		}) as AEGP_StreamType
 	}
 
@@ -183,7 +193,7 @@ impl StreamValue {
 	pub(crate) fn dimensionality(self) -> A_short {
 		match self {
 			Self::NoData => 0,
-			Self::OneD(_) | Self::LayerId(_) | Self::Arb(_) => 1,
+			Self::OneD(_) | Self::LayerId(_) | Self::Arb(_) | Self::Mask => 1,
 			Self::TwoD { .. } => 2,
 			Self::ThreeD { .. } => 3,
 			Self::Color { .. } => 4,
@@ -206,7 +216,8 @@ macro_rules! write_val {
 	($value:expr, $out:expr) => {{
 		let out = $out;
 		match $value {
-			StreamValue::NoData => {}
+			// A mask outline is a handle the caller allocates; see `get_new_stream_value!`.
+			StreamValue::NoData | StreamValue::Mask => {}
 			StreamValue::OneD(v) => out.one_d = v,
 			StreamValue::TwoD { x, y, .. } => out.two_d = AEGP_TwoDVal { x, y },
 			StreamValue::ThreeD { x, y, z, .. } => out.three_d = AEGP_ThreeDVal { x, y, z },
@@ -265,6 +276,9 @@ pub(crate) unsafe fn stream_value(streamH: AEGP_StreamRefH) -> Option<StreamValu
 		}),
 		Node::Rotation => Some(StreamValue::OneD(0.0)),
 		Node::Opacity => Some(StreamValue::OneD(100.0)),
+		Node::MaskOutline => {
+			super::layer_mask::mask_path_at(stream.effect_ref, stream.index).map(|_| StreamValue::Mask)
+		}
 		_ => Some(StreamValue::NoData),
 	}
 }
@@ -388,15 +402,40 @@ unsafe extern "C" fn get_new_effect_stream_by_index(
 	})
 }
 
+/// Only the outline of a mask is a stream aexlo serves: the mask model holds
+/// no opacity, feather or expansion, no color and no animation.
 unsafe extern "C" fn get_new_mask_stream(
 	_aegp_plugin_id: AEGP_PluginID,
-	_mask_refH: AEGP_MaskRefH,
-	_which_stream: AEGP_MaskStream,
-	_mask_streamPH: *mut AEGP_StreamRefH,
+	mask_refH: AEGP_MaskRefH,
+	which_stream: AEGP_MaskStream,
+	mask_streamPH: *mut AEGP_StreamRefH,
 ) -> A_Err {
 	crate::core::ffi::guard("get_new_mask_stream", || {
-		diag!("AEGP_StreamSuite/AEGP_GetNewMaskStream");
-		unsupported("AEGP_GetNewMaskStream")
+		diag!("AEGP_StreamSuite/AEGP_GetNewMaskStream",
+			"mask_refH" => format!("{:#x}", mask_refH as usize),
+			"which_stream" => which_stream,
+		);
+		let Some(out) = (unsafe { mask_streamPH.as_mut() }) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		*out = std::ptr::null_mut();
+		let Some((effect_ref, index)) = super::layer_mask::mask_ref_of(mask_refH) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		if which_stream != AEGP_MaskStream_OUTLINE as AEGP_MaskStream {
+			crate::observe::unsupported(
+				crate::observe::UnsupportedKind::Declined,
+				"AEGP_StreamSuite/AEGP_GetNewMaskStream",
+				format!("which_stream={which_stream}"),
+			);
+			return unsupported("AEGP_GetNewMaskStream (only the outline stream)");
+		}
+		*out = new_stream_handle(Stream {
+			effect_ref,
+			index,
+			node: Node::MaskOutline,
+		});
+		PF_Err_NONE
 	})
 }
 
@@ -622,6 +661,15 @@ macro_rules! get_new_stream_value {
 			*out = unsafe { std::mem::zeroed() };
 			out.streamH = streamH;
 			write_val!(value, &mut out.val);
+			if value == StreamValue::Mask {
+				// A copy the plugin owns until `AEGP_DisposeStreamValue`.
+				let Some(path) = (unsafe { stream_of(streamH) })
+					.and_then(|s| super::layer_mask::mask_path_at(s.effect_ref, s.index))
+				else {
+					return PF_Err_BAD_CALLBACK_PARAM;
+				};
+				out.val.mask = super::mask_outline::new_value(path);
+			}
 			PF_Err_NONE
 		}
 	};
@@ -630,16 +678,21 @@ macro_rules! get_new_stream_value {
 get_new_stream_value!(get_new_stream_value_v1, AEGP_StreamValue);
 get_new_stream_value!(get_new_stream_value_v2, AEGP_StreamValue2);
 
-/// Stream values never own memory here. An arbitrary handle is the parameter's
-/// own value, so disposing the stream value must not free it.
+/// Stream values own no memory here, except a mask outline copy. An arbitrary
+/// handle is the parameter's own value, so disposing the stream value must not
+/// free it. A mask outline is freed when its handle is one still live; any
+/// other value bits are left alone.
 macro_rules! dispose_stream_value {
 	($name:ident, $value_ty:ty) => {
 		unsafe extern "C" fn $name(valueP: *mut $value_ty) -> A_Err {
 			diag!("AEGP_StreamSuite/AEGP_DisposeStreamValue", "valueP" => format!("{:#x}", valueP as usize));
 
-			if valueP.is_null() {
+			let Some(value) = (unsafe { valueP.as_ref() }) else {
 				return PF_Err_BAD_CALLBACK_PARAM;
-			}
+			};
+			// SAFETY: every member of the value union is plain old data, and the
+			// lookup only compares the address with the live outline copies.
+			super::mask_outline::dispose_value(unsafe { value.val.mask });
 			PF_Err_NONE
 		}
 	};

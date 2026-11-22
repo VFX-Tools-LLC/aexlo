@@ -7,6 +7,27 @@ use crate::core::constants::{DEFAULT_HEIGHT as HEIGHT, DEFAULT_WIDTH as WIDTH};
 use crate::core::diagnostics::diag;
 
 //==== Stub implementations ================================
+
+/// `GuidMixInPtr`: the bytes a plugin mixes into the frame's cache key during
+/// pre-render (`PF_OutFlag2_I_MIX_GUID_DEPENDENCIES`). aexlo has no render
+/// cache, so it only keeps them, for [`PluginInstance::pre_render_guid_mix`].
+unsafe extern "C" fn guid_mix_in(effect_ref: PF_ProgPtr, buf_sizeLu: A_u_long, buf: *const std::ffi::c_void) -> PF_Err {
+	crate::core::ffi::guard("guid_mix_in", || {
+		diag!("PF_PreRenderCallbacks/GuidMixInPtr", "buf_sizeLu" => buf_sizeLu);
+		let Some(mut instance) = PluginInstance::get_instance_ptr(effect_ref) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		let bytes = if buf.is_null() || buf_sizeLu == 0 {
+			&[][..]
+		} else {
+			// SAFETY: the plugin passes `buf_sizeLu` readable bytes.
+			unsafe { std::slice::from_raw_parts(buf as *const u8, buf_sizeLu as usize) }
+		};
+		// SAFETY: `effect_ref` is the instance running this pre-render.
+		unsafe { instance.as_mut() }.mix_in_guid(bytes);
+		PF_Err_NONE
+	})
+}
 unsafe extern "C" fn checkout_layer_stub(
 	effect_ref: PF_ProgPtr,
 	index: PF_ParamIndex,
@@ -255,7 +276,7 @@ impl SmartRenderData {
 			pre_output: Box::new(empty_pre_render_output()),
 			pre_callbacks: Box::new(crate::sys::PF_PreRenderCallbacks {
 				checkout_layer: Some(checkout_layer_stub),
-				GuidMixInPtr: None,
+				GuidMixInPtr: Some(guid_mix_in),
 			}),
 
 			input: Box::new(crate::sys::PF_SmartRenderInput {

@@ -1,0 +1,15 @@
+[package]
+name = "aexlo_probe_masks"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "A test effect that reads the layer's masks through the AEGP Layer Mask Suite and encodes what it saw into its output pixels"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+after-effects-sys = { workspace = true }

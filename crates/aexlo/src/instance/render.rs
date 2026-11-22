@@ -133,6 +133,7 @@ impl PluginInstance {
 	/// input/output checkout regions it needs via [`Self::render_smart`].
 	fn render_pre(&mut self) -> Result<()> {
 		self.layer_checkouts.clear();
+		self.pre_render_guid_mix.clear();
 		// Each pre-render gets a fresh output, as in After Effects; plugins OR
 		// their flags into it and would otherwise inherit the last frame's.
 		self.smart_render_data.begin_pre_render();

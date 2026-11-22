@@ -123,6 +123,17 @@ impl PluginInstance {
 		self.mask_paths = paths;
 	}
 
+	/// The bytes the plugin mixed into the frame's cache key with `GuidMixInPtr`
+	/// during the last smart pre-render, in call order. Empty when it mixed
+	/// nothing. aexlo has no render cache, so this is only for inspection.
+	pub fn pre_render_guid_mix(&self) -> &[u8] {
+		&self.pre_render_guid_mix
+	}
+
+	pub(crate) fn mix_in_guid(&mut self, bytes: &[u8]) {
+		self.pre_render_guid_mix.extend_from_slice(bytes);
+	}
+
 	/// The text on the effect's layer, when it is a text layer (see
 	/// [`Self::set_text_layer`]).
 	pub fn text_layer(&self) -> Option<&crate::TextLayer> {

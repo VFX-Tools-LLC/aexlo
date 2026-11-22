@@ -284,6 +284,10 @@ pub struct PluginInstance {
 	/// Masks on the effect's layer, served through the Path Query/Data suites.
 	mask_paths: Vec<crate::MaskPath>,
 
+	/// What the plugin mixed into the frame's cache key (`GuidMixInPtr`) during
+	/// the last smart pre-render.
+	pre_render_guid_mix: Vec<u8>,
+
 	/// The text when the effect's layer is a text layer, served through the
 	/// Text Layer Suite.
 	text_layer: Option<crate::TextLayer>,
