@@ -93,17 +93,22 @@ pub fn outcomes(report: &serde_json::Value) -> Vec<(String, String)> {
 
 /// Build the misbehaving effect and return its dynamic library.
 pub fn misbehave_artifact() -> PathBuf {
-	crate_artifact("aexlo_misbehave")
+	cdylib_artifact("aexlo_misbehave")
 }
 
 /// Build the footage-probing test effect (`tests/probe_footage`) and return
 /// its dynamic library.
 pub fn probe_footage_artifact() -> PathBuf {
-	crate_artifact("aexlo_probe_footage")
+	cdylib_artifact("aexlo_probe_footage")
 }
 
-/// Build the workspace cdylib `package` and return a private copy of it.
-fn crate_artifact(package: &str) -> PathBuf {
+/// Build the effect whose library hangs at process exit (`tests/hang_on_exit`).
+pub fn hang_on_exit_artifact() -> PathBuf {
+	cdylib_artifact("aexlo_hang_on_exit")
+}
+
+/// Build the cdylib package `package` and return a private copy of its library.
+fn cdylib_artifact(package: &str) -> PathBuf {
 	let status = std::process::Command::new(env!("CARGO"))
 		.args(["build", "-q", "-p", package])
 		.current_dir(workspace())

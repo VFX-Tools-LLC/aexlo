@@ -163,7 +163,55 @@ fn print_usage() {
 	print!("{USAGE_HEAD}{}{}{USAGE_TAIL}", compat::USAGE, inspect::USAGE);
 }
 
+/// Run the command, then end the process without letting Windows (or libc)
+/// run the plugin's exit-time handlers.
+///
+/// A returning `main` ends in `ExitProcess`, which kills every other thread
+/// and then runs each loaded plugin's `DLL_PROCESS_DETACH` and static
+/// destructors. A plugin that stops a worker thread of its own in such a
+/// destructor then waits for a thread that no longer exists: Wrap It 2 and
+/// ProjectIt, which link the aescripts license check, never exit, and a
+/// `compat` run waits for them forever (the hung process cannot even be
+/// killed, as it holds the loader lock). aexlo owns nothing the plugin's exit
+/// handlers would free for it, so it flushes its own output and ends the
+/// process directly. `AEXLO_CLEAN_EXIT=1` restores the normal exit, for
+/// debugging a plugin's own teardown.
 fn main() -> ExitCode {
+	let code = real_main();
+	if std::env::var_os("AEXLO_CLEAN_EXIT").is_some_and(|v| v != "0") {
+		return code;
+	}
+	use std::io::Write;
+	let _ = std::io::stdout().flush();
+	let _ = std::io::stderr().flush();
+	let status = (0..=255u8).find(|n| code == ExitCode::from(*n)).unwrap_or(1);
+	fast_exit(i32::from(status))
+}
+
+#[cfg(windows)]
+fn fast_exit(status: i32) -> ! {
+	unsafe extern "system" {
+		fn GetCurrentProcess() -> isize;
+		fn TerminateProcess(process: isize, exit_code: u32) -> i32;
+	}
+	// SAFETY: kernel32 calls on the current process, with a status in 0..=255.
+	unsafe {
+		TerminateProcess(GetCurrentProcess(), status as u32);
+	}
+	// TerminateProcess on the current process does not return.
+	std::process::abort()
+}
+
+#[cfg(not(windows))]
+fn fast_exit(status: i32) -> ! {
+	unsafe extern "C" {
+		fn _exit(status: i32) -> !;
+	}
+	// SAFETY: `_exit` ends the process at once, without atexit handlers.
+	unsafe { _exit(status) }
+}
+
+fn real_main() -> ExitCode {
 	let _ = env_logger::try_init();
 	let mut args = std::env::args().skip(1);
 	let command = args.next();

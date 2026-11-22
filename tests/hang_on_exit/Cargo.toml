@@ -1,0 +1,15 @@
+[package]
+name = "aexlo_hang_on_exit"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "An effect whose DLL hangs in its process-exit handler, for testing aexlo's exit path"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+after-effects-sys = { workspace = true }
