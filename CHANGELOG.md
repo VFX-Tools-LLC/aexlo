@@ -18,6 +18,13 @@ may break the API, and every breaking change is listed below.
 
 ### Added
 
+- "AEGP Proj Suite" v9 (`AEGP_ProjSuite6`): one project whose handle the Item
+  Suite takes back. `AEGP_GetNumProjects` (1), `AEGP_GetProjectByIndex`,
+  `AEGP_GetProjectBitDepth` (the render's depth) and
+  `AEGP_GetProjectTimeDisplay` (built from `AppHost::time_display_pref`, so
+  frame numbering follows the host) answer. The project name, path, dirty
+  flag, root folder and every edit report `UnsupportedKind::Declined`.
+  ProjectIt and Wrap It 2 read the time display to number frames.
 - Footage layers: `PluginInstance::set_layer_param_footage_path` links a layer
   parameter to a footage item whose file is on disk, and `aexlo-harness`
   reads it from `layers = { "LUT File" = { footage = "x.cube" } }`. The

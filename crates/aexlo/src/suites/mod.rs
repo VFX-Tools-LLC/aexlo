@@ -42,6 +42,7 @@ mod adv_time;
 mod ae_app;
 mod aegp_item;
 mod aegp_memory;
+mod aegp_proj;
 mod aegp_render;
 mod aegp_utility;
 mod aegp_world;
@@ -105,6 +106,7 @@ static AEGP_DYNAMIC_STREAM_3: AEGP_DynamicStreamSuite3 = dynamic_stream::suite_3
 static AEGP_DYNAMIC_STREAM_4: AEGP_DynamicStreamSuite4 = dynamic_stream::suite_4();
 static AEGP_ITEM_8: AEGP_ItemSuite8 = aegp_item::suite_8();
 static AEGP_ITEM_9: AEGP_ItemSuite9 = aegp_item::suite_9();
+static AEGP_PROJ_6: AEGP_ProjSuite6 = aegp_proj::suite_6();
 static AEGP_FOOTAGE_5: AEGP_FootageSuite5 = footage::suite_5();
 static AEGP_LAYER_RENDER_OPTIONS_2: AEGP_LayerRenderOptionsSuite2 = aegp_render::layer_render_options_suite_2();
 static AEGP_RENDER_OPTIONS_4: AEGP_RenderOptionsSuite4 = aegp_render::render_options_suite_4();
@@ -470,6 +472,11 @@ pub unsafe extern "C" fn rusty_acquire_suite(name: *const i8, version: i32, suit
 		}
 		("AEGP Item Suite", v) if v == kAEGPItemSuiteVersion9 as i32 => {
 			unsafe { *suite = &AEGP_ITEM_9 as *const _ as *const c_void };
+			PF_Err_NONE
+		}
+		// Wire version 9 is `AEGP_ProjSuite6`, the only Proj Suite version aexlo serves.
+		("AEGP Proj Suite", v) if v == kAEGPProjSuiteVersion6 as i32 => {
+			unsafe { *suite = &AEGP_PROJ_6 as *const _ as *const c_void };
 			PF_Err_NONE
 		}
 		("AEGP Footage Suite", v) if v == kAEGPFootageSuiteVersion5 as i32 => {

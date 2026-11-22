@@ -196,7 +196,7 @@ aexlo compat fixtures/plugins/macos --baseline compat.json   # 悪化があれ�
 | △ Light        | ○ Persistent Data | △ Render               | × Camera               |
 | △ Effect       | × Mask            | △ Render Options       | × QueryXform           |
 | △ PF Interface | × Mask Outline    | △ Layer Render Options | × Math                 |
-| × Proj         | × Text Document   | × Composite            | × Compute Cache        |
+| △ Proj         | × Text Document   | × Composite            | × Compute Cache        |
 | × Footage      | ○ Text Layer      | × Canvas               | × Hash                 |
 | × Collection   |                   | × Sound Data           | × Render Async Manager |
 | × Marker       |                   |                        |                        |

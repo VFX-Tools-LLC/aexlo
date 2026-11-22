@@ -218,13 +218,14 @@ during `PF_Event_DRAW`. The CLI never sends `PF_Cmd_EVENT`; an embedder does.
 | △ Light        | ○ Persistent Data | △ Render               | × Camera               |
 | △ Effect       | △ Mask            | △ Render Options       | × QueryXform           |
 | △ PF Interface | △ Mask Outline    | △ Layer Render Options | × Math                 |
-| × Proj         | × Text Document   | × Composite            | × Compute Cache        |
+| △ Proj         | × Text Document   | × Composite            | × Compute Cache        |
 | × Footage      | ○ Text Layer      | × Canvas               | × Hash                 |
 | × Collection   |                   | × Sound Data           | × Render Async Manager |
 | × Marker       |                   |                        |                        |
 
 △ Layer / Comp / Item / Light / Effect / PF Interface / Stream / Dynamic Stream / Keyframe: the project is aexlo's fixed one-layer comp, with no keyframes.
 △ Mask / Mask Outline: read-only, from the masks an embedder attaches with `set_mask_paths` (invert, mode, id and the Bezier outline). Opacity, feather, expansion, color and every edit are refused.
+△ Proj: one project. It answers the project count, the bit depth (the render's depth) and the time display (the host's `time_display_pref`); name, path, dirty flag, root folder and every edit are refused.
 △ Render / Render Options / Layer Render Options: checkout returns the effect's own input.
 △ Color Settings: the working space is sRGB, with no colour management.
 △ Register: idle hooks are recorded and never called.
