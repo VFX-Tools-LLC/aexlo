@@ -1,0 +1,15 @@
+[package]
+name = "aexlo_probe_sequence"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "A test effect that reads its sequence data back through the PF Effect Sequence Data Suite and encodes what it saw into its output pixels"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+after-effects-sys = { workspace = true }

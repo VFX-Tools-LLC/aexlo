@@ -25,6 +25,12 @@ may break the API, and every breaking change is listed below.
   frame numbering follows the host) answer. The project name, path, dirty
   flag, root folder and every edit report `UnsupportedKind::Declined`.
   ProjectIt and Wrap It 2 read the time display to number frames.
+- "PF Effect Sequence Data Suite" v1 (`PF_GetConstSequenceData`) answers with the
+  instance's `sequence_data` handle, the one the plugin allocated in
+  `PF_Cmd_SEQUENCE_SETUP` (null, with success, before it has). Plugins that read
+  their data this way at render time, such as SuperClone, got
+  `UnsupportedKind::MissingSuite` before.
+
 - Footage layers: `PluginInstance::set_layer_param_footage_path` links a layer
   parameter to a footage item whose file is on disk, and `aexlo-harness`
   reads it from `layers = { "LUT File" = { footage = "x.cube" } }`. The

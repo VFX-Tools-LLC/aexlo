@@ -14,6 +14,7 @@ members = [
   "tests/probe_footage",
   "tests/probe_masks",
   "tests/probe_proj",
+  "tests/probe_sequence",
   "playground/probe",
   "playground/harness",
 ]
