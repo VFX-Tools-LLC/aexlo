@@ -7,6 +7,15 @@ may break the API, and every breaking change is listed below.
 
 ## [Unreleased]
 
+### Fixed
+
+- The `aexlo` CLI no longer hangs at exit with a plugin that stops a thread of
+  its own in an exit-time destructor (the aescripts license check in Wrap It 2
+  and ProjectIt waited forever for a thread `ExitProcess` had already killed,
+  so `compat` never returned). The CLI flushes its output and ends the process
+  without running plugin exit handlers; `AEXLO_CLEAN_EXIT=1` restores the
+  normal exit.
+
 ### Added
 
 - `Observer::unsupported` hears about what the plugin asked for and aexlo
