@@ -387,6 +387,7 @@ impl PluginInstance {
 				mask_paths: Vec::new(),
 				text_layer: None,
 				linked_layers: HashMap::new(),
+				footage_layers: HashMap::new(),
 				layer_checkouts: HashMap::new(),
 				parallel_iterate: true,
 				owned_arb_values: Vec::new(),

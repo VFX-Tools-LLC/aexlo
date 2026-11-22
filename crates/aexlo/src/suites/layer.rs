@@ -19,6 +19,7 @@ use std::cell::Cell;
 
 use crate::sys::*;
 
+use super::footage;
 use crate::PluginInstance;
 use crate::core::diagnostics::diag;
 
@@ -177,17 +178,36 @@ unsafe extern "C" fn get_layer_index(layerH: AEGP_LayerH, layer_indexPL: *mut A_
 	})
 }
 
-unsafe extern "C" fn get_layer_source_item(_layerH: AEGP_LayerH, _source_itemPH: *mut AEGP_ItemH) -> A_Err {
+/// The source item of a footage layer (one a layer parameter is linked to, see
+/// [`footage`](super::footage)). The effect's own layer has no source item.
+unsafe extern "C" fn get_layer_source_item(layerH: AEGP_LayerH, source_itemPH: *mut AEGP_ItemH) -> A_Err {
 	crate::core::ffi::guard("get_layer_source_item", || {
-		diag!("AEGP_LayerSuite/AEGP_GetLayerSourceItem");
-		unsupported("AEGP_GetLayerSourceItem")
+		diag!("AEGP_LayerSuite/AEGP_GetLayerSourceItem", "layerH" => format!("{:#x}", layerH as usize));
+		let Some(layer) = footage::decode_kind(layerH as _, footage::Kind::Layer) else {
+			return unsupported("AEGP_GetLayerSourceItem");
+		};
+		let (Some(out), Some(item)) = (unsafe { source_itemPH.as_mut() }, footage::source_item(layer)) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		*out = item as AEGP_ItemH;
+		PF_Err_NONE
 	})
 }
 
-unsafe extern "C" fn get_layer_source_item_id(_layerH: AEGP_LayerH, _source_item_idPL: *mut A_long) -> A_Err {
+unsafe extern "C" fn get_layer_source_item_id(layerH: AEGP_LayerH, source_item_idPL: *mut A_long) -> A_Err {
 	crate::core::ffi::guard("get_layer_source_item_id", || {
-		diag!("AEGP_LayerSuite/AEGP_GetLayerSourceItemID");
-		unsupported("AEGP_GetLayerSourceItemID")
+		diag!("AEGP_LayerSuite/AEGP_GetLayerSourceItemID", "layerH" => format!("{:#x}", layerH as usize));
+		let Some(layer) = footage::decode_kind(layerH as _, footage::Kind::Layer) else {
+			return unsupported("AEGP_GetLayerSourceItemID");
+		};
+		let (Some(out), Some(item)) = (unsafe { source_item_idPL.as_mut() }, footage::source_item(layer)) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		let Some(item) = footage::decode(item) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		*out = footage::item_id(item);
+		PF_Err_NONE
 	})
 }
 
@@ -614,8 +634,16 @@ unsafe extern "C" fn get_layer_from_layer_id(
 			"parent_compH" => format!("{:#x}", parent_compH as usize),
 			"id" => id,
 		);
+		// A layer parameter linked to footage is a layer of the comp too.
 		if id != LAYER_ID && Timeline::of(parent_compH as _).is_some() {
-			return PF_Err_INVALID_INDEX;
+			let Some(layer) = footage::layer_from_id(parent_compH as PF_ProgPtr, id) else {
+				return PF_Err_INVALID_INDEX;
+			};
+			let Some(out) = (unsafe { layerPH.as_mut() }) else {
+				return PF_Err_BAD_CALLBACK_PARAM;
+			};
+			*out = layer as AEGP_LayerH;
+			return PF_Err_NONE;
 		}
 		answer(parent_compH as _, layerPH, |_| layer_handle(parent_compH as PF_ProgPtr))
 	})

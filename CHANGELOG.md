@@ -9,6 +9,17 @@ may break the API, and every breaking change is listed below.
 
 ### Added
 
+- Footage layers: `PluginInstance::set_layer_param_footage_path` links a layer
+  parameter to a footage item whose file is on disk, and `aexlo-harness`
+  reads it from `layers = { "LUT File" = { footage = "x.cube" } }`. The
+  plugin reaches the file as it does in After Effects: the parameter's stream
+  value is a layer id, `AEGP_GetLayerFromLayerID` and
+  `AEGP_GetLayerSourceItem` lead to a footage item, and the new "AEGP Item
+  Suite" v14 (`AEGP_ItemSuite9`, `AEGP_GetItemType`/`Name`/`ID`) and "AEGP
+  Footage Suite" v11 (`AEGP_GetMainFootageFromItem`, `AEGP_GetFootageNumFiles`,
+  `AEGP_GetFootagePath`) answer. Everything else about a footage item reports
+  itself as `UnsupportedKind::Declined`. Runner Color reads its LUT File and
+  CLF File this way.
 - `Observer::unsupported` hears about what the plugin asked for and aexlo
   does not do (`UnsupportedEvent`, at every `ObserveLevel`): suites or
   versions it does not serve (`UnsupportedKind::MissingSuite`), host

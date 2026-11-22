@@ -168,6 +168,8 @@ impl PluginInstance {
 
 		// SAFETY: the parameter was verified to be a layer above.
 		let current = unsafe { self.params[index].u.ld };
+		// A layer parameter links one layer: pixels replace a footage item.
+		self.footage_layers.remove(&index);
 		let unlinked = self.linked_layers.remove(&index).map_or(current, |l| l.unlinked);
 		let def = match layer {
 			Some(layer) => {
@@ -180,6 +182,44 @@ impl PluginInstance {
 		};
 		self.params[index].u = PF_ParamDefUnion { ld: def };
 		Ok(())
+	}
+
+	/// Link the plugin's layer parameter at `index` (same index space as
+	/// [`Self::set_param`]) to a footage item whose file is `path`, or unlink
+	/// it with `None`. The plugin finds the file through the AEGP chain After
+	/// Effects serves for it: the parameter's stream value is the layer id,
+	/// `AEGP_GetLayerFromLayerID` and `AEGP_GetLayerSourceItem` lead to a
+	/// footage item, and the Footage Suite's `AEGP_GetFootagePath` answers
+	/// `path`. This is how a plugin reads a LUT or other data file from a layer
+	/// parameter.
+	///
+	/// The item carries no pixels: the parameter is cleared of any layer
+	/// linked with [`Self::set_layer_param`] (the two are exclusive, as one
+	/// layer parameter names one layer), and a checkout of it sees no layer.
+	/// A relative `path` is made absolute against the current directory. The
+	/// file need not exist, which is how a plugin's missing-file handling is
+	/// exercised.
+	///
+	/// # Errors
+	/// As [`Self::set_layer_param`].
+	pub fn set_layer_param_footage_path(
+		&mut self,
+		index: usize,
+		path: Option<impl Into<std::path::PathBuf>>,
+	) -> Result<()> {
+		self.clear_layer_param(index)?;
+		if let Some(path) = path {
+			let path = path.into();
+			let path = std::path::absolute(&path).unwrap_or(path);
+			self.footage_layers.insert(index, path);
+		}
+		Ok(())
+	}
+
+	/// The footage file the layer parameter at `index` is linked to, if any
+	/// (see [`Self::set_layer_param_footage_path`]).
+	pub fn layer_param_footage_path(&self, index: usize) -> Option<&std::path::Path> {
+		self.footage_layers.get(&index).map(std::path::PathBuf::as_path)
 	}
 
 	/// Unlink the layer parameter at `index` (its "None" choice); the same as

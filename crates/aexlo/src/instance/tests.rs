@@ -361,3 +361,114 @@ fn an_observer_hears_about_missing_suites_and_stubs_at_any_level() {
 		["MissingSuite AEGP Nonexistent Suite v3", "Stub blend "]
 	);
 }
+
+/// The chain a plugin follows from a layer parameter to the file behind it
+/// (Runner Color's "LUT File"), through the suites as it acquires them.
+#[test]
+fn a_layer_param_linked_to_footage_leads_to_its_file_path() {
+	use crate::sys::*;
+	use std::ffi::{CString, c_void};
+
+	fn suite<T>(name: &str, version: u32) -> &'static T {
+		let name = CString::new(name).unwrap();
+		let mut out: *const c_void = std::ptr::null();
+		let err = unsafe { crate::suites::rusty_acquire_suite(name.as_ptr(), version as i32, &mut out) };
+		assert_eq!(err, PF_Err_NONE);
+		unsafe { &*(out as *const T) }
+	}
+
+	let mut fx = bare_instance();
+	fx.add_instance_param(param_of_type(PF_Param_LAYER as PF_ParamType));
+	let path = std::env::temp_dir().join("aexlo_footage_test.cube");
+	assert!(fx.layer_param_footage_path(1).is_none());
+	fx.set_layer_param_footage_path(1, Some(&path)).unwrap();
+	assert_eq!(fx.layer_param_footage_path(1), Some(path.as_path()));
+	// Not a layer parameter, and the input layer.
+	assert!(fx.set_layer_param_footage_path(0, Some(&path)).is_err());
+	assert!(fx.set_layer_param_footage_path(9, Some(&path)).is_err());
+
+	let effect_ref = &mut fx as *mut PluginInstance as PF_ProgPtr;
+	let _scope = crate::suites::enter_effect(effect_ref);
+
+	let iface: &AEGP_PFInterfaceSuite1 = suite("AEGP PF Interface Suite", 1);
+	let streams: &AEGP_StreamSuite6 = suite("AEGP Stream Suite", kAEGPStreamSuiteVersion6);
+	let layers: &AEGP_LayerSuite9 = suite("AEGP Layer Suite", kAEGPLayerSuiteVersion9);
+	let items: &AEGP_ItemSuite9 = suite("AEGP Item Suite", kAEGPItemSuiteVersion9);
+	let footage: &AEGP_FootageSuite5 = suite("AEGP Footage Suite", kAEGPFootageSuiteVersion5);
+	let memory: &AEGP_MemorySuite1 = suite("AEGP Memory Suite", kAEGPMemorySuiteVersion1);
+
+	unsafe {
+		let mut effect_h = std::ptr::null_mut();
+		assert_eq!(
+			iface.AEGP_GetNewEffectForEffect.unwrap()(0, effect_ref, &mut effect_h),
+			PF_Err_NONE
+		);
+		let mut stream_h = std::ptr::null_mut();
+		assert_eq!(
+			streams.AEGP_GetNewEffectStreamByIndex.unwrap()(0, effect_h, 1, &mut stream_h),
+			PF_Err_NONE
+		);
+		let mut value: AEGP_StreamValue2 = std::mem::zeroed();
+		let time = A_Time { value: 0, scale: 30 };
+		assert_eq!(
+			streams.AEGP_GetNewStreamValue.unwrap()(0, stream_h, AEGP_LTimeMode_LayerTime as _, &time, 0, &mut value),
+			PF_Err_NONE
+		);
+		let layer_id = value.val.layer_id;
+		assert_ne!(layer_id, 0);
+
+		let mut effect_layer = std::ptr::null_mut();
+		assert_eq!(
+			iface.AEGP_GetEffectLayer.unwrap()(effect_ref, &mut effect_layer),
+			PF_Err_NONE
+		);
+		let mut comp = std::ptr::null_mut();
+		assert_eq!(
+			layers.AEGP_GetLayerParentComp.unwrap()(effect_layer, &mut comp),
+			PF_Err_NONE
+		);
+		let mut layer = std::ptr::null_mut();
+		assert_eq!(
+			layers.AEGP_GetLayerFromLayerID.unwrap()(comp, layer_id, &mut layer),
+			PF_Err_NONE
+		);
+		let mut item = std::ptr::null_mut();
+		assert_eq!(layers.AEGP_GetLayerSourceItem.unwrap()(layer, &mut item), PF_Err_NONE);
+
+		let mut kind: AEGP_ItemType = 0;
+		assert_eq!(items.AEGP_GetItemType.unwrap()(item, &mut kind), PF_Err_NONE);
+		assert_eq!(kind, AEGP_ItemType_FOOTAGE as AEGP_ItemType);
+
+		let mut foot = std::ptr::null_mut();
+		assert_eq!(
+			footage.AEGP_GetMainFootageFromItem.unwrap()(item, &mut foot),
+			PF_Err_NONE
+		);
+		let mut path_h = std::ptr::null_mut();
+		assert_eq!(
+			footage.AEGP_GetFootagePath.unwrap()(foot, 0, 0, &mut path_h),
+			PF_Err_NONE
+		);
+		let mut locked: *mut c_void = std::ptr::null_mut();
+		assert_eq!(memory.AEGP_LockMemHandle.unwrap()(path_h, &mut locked), PF_Err_NONE);
+		let units = locked as *const u16;
+		let len = (0..).take_while(|&i| *units.add(i) != 0).count();
+		let got = String::from_utf16(std::slice::from_raw_parts(units, len)).unwrap();
+		assert_eq!(got, path.to_string_lossy());
+		memory.AEGP_UnlockMemHandle.unwrap()(path_h);
+		memory.AEGP_FreeMemHandle.unwrap()(path_h);
+
+		// Unlinking takes the whole chain away: no layer id, no layer.
+		fx.set_layer_param_footage_path(1, None::<std::path::PathBuf>).unwrap();
+		let mut after: AEGP_StreamValue2 = std::mem::zeroed();
+		assert_eq!(
+			streams.AEGP_GetNewStreamValue.unwrap()(0, stream_h, AEGP_LTimeMode_LayerTime as _, &time, 0, &mut after),
+			PF_Err_NONE
+		);
+		assert_eq!(after.val.layer_id, 0);
+		assert_ne!(
+			layers.AEGP_GetLayerFromLayerID.unwrap()(comp, layer_id, &mut layer),
+			PF_Err_NONE
+		);
+	}
+}

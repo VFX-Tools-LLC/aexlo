@@ -60,6 +60,7 @@ mod effect;
 mod effect_ui;
 mod ffi;
 pub mod fill_matte;
+pub(crate) mod footage;
 pub mod gpu_device;
 pub mod handle;
 mod helper;
@@ -101,6 +102,8 @@ static AEGP_DYNAMIC_STREAM_2: AEGP_DynamicStreamSuite2 = dynamic_stream::suite_2
 static AEGP_DYNAMIC_STREAM_3: AEGP_DynamicStreamSuite3 = dynamic_stream::suite_3();
 static AEGP_DYNAMIC_STREAM_4: AEGP_DynamicStreamSuite4 = dynamic_stream::suite_4();
 static AEGP_ITEM_8: AEGP_ItemSuite8 = aegp_item::suite_8();
+static AEGP_ITEM_9: AEGP_ItemSuite9 = aegp_item::suite_9();
+static AEGP_FOOTAGE_5: AEGP_FootageSuite5 = footage::suite_5();
 static AEGP_LAYER_RENDER_OPTIONS_2: AEGP_LayerRenderOptionsSuite2 = aegp_render::layer_render_options_suite_2();
 static AEGP_RENDER_OPTIONS_4: AEGP_RenderOptionsSuite4 = aegp_render::render_options_suite_4();
 static AEGP_RENDER_5: AEGP_RenderSuite5 = aegp_render::render_suite_5();
@@ -459,6 +462,14 @@ pub unsafe extern "C" fn rusty_acquire_suite(name: *const i8, version: i32, suit
 			unsafe { *suite = &AEGP_ITEM_8 as *const _ as *const c_void };
 			PF_Err_NONE
 		}
+		("AEGP Item Suite", v) if v == kAEGPItemSuiteVersion9 as i32 => {
+			unsafe { *suite = &AEGP_ITEM_9 as *const _ as *const c_void };
+			PF_Err_NONE
+		}
+		("AEGP Footage Suite", v) if v == kAEGPFootageSuiteVersion5 as i32 => {
+			unsafe { *suite = &AEGP_FOOTAGE_5 as *const _ as *const c_void };
+			PF_Err_NONE
+		}
 		("AEGP Layer Render Options Suite", v) if v == kAEGPLayerRenderOptionsSuiteVersion2 as i32 => {
 			unsafe { *suite = &AEGP_LAYER_RENDER_OPTIONS_2 as *const _ as *const c_void };
 			PF_Err_NONE
@@ -667,6 +678,8 @@ mod tests {
 			("AEGP Memory Suite", 1),
 			("AEGP Item Suite", 10),
 			("AEGP Item Suite", 13),
+			("AEGP Item Suite", 14),
+			("AEGP Footage Suite", 11),
 			("AEGP Layer Render Options Suite", 2),
 			("AEGP Render Options Suite", 4),
 			("AEGP Render Suite", 8),

@@ -291,6 +291,10 @@ pub struct PluginInstance {
 	/// Layers linked to the plugin's own `PF_Param_LAYER` parameters, by index.
 	linked_layers: HashMap<usize, LinkedLayer>,
 
+	/// Layer parameters linked to a footage item that is a file on disk, by
+	/// index (see [`Self::set_layer_param_footage_path`]).
+	footage_layers: HashMap<usize, std::path::PathBuf>,
+
 	/// Smart-render checkout ids mapped to the layer parameter they checked
 	/// out, recorded by `checkout_layer` during pre-render.
 	layer_checkouts: HashMap<crate::sys::A_long, usize>,
@@ -601,6 +605,11 @@ impl PluginInstance {
 	/// Callers must uphold aliasing rules before dereferencing.
 	pub(crate) fn get_instance_ptr(effect_ref: PF_ProgPtr) -> Option<NonNull<PluginInstance>> {
 		if effect_ref.is_null() {
+			return None;
+		}
+		// A footage layer, item or footage handle is a tagged integer, never an
+		// instance (see `suites::footage`).
+		if crate::suites::footage::is_handle(effect_ref as *mut std::ffi::c_void) {
 			return None;
 		}
 

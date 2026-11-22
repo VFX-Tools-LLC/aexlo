@@ -1,7 +1,12 @@
-//! `AEGP Item Suite`, wire versions 10 (`AEGP_ItemSuite6`) and 13
-//! (`AEGP_ItemSuite8`). The two are not the same layout: version 10 names an
-//! item with a fixed `char` buffer, while version 13 takes a plugin id and
-//! returns a UTF-16 handle.
+//! `AEGP Item Suite`, wire versions 10 (`AEGP_ItemSuite6`), 13
+//! (`AEGP_ItemSuite8`) and 14 (`AEGP_ItemSuite9`). They are not the same
+//! layout: version 10 names an item with a fixed `char` buffer, version 13
+//! takes a plugin id and returns a UTF-16 handle, and version 14 also returns
+//! the comment as a UTF-16 handle.
+//!
+//! An item that is a footage file (a layer parameter linked to footage, see
+//! [`footage`](super::footage)) answers its type, name and id; anything else
+//! about it reports itself through `observe::unsupported` and fails.
 //!
 //! aexlo's project has one item, and it is the comp (the same pointer as the
 //! layer and the comp; see [`layer`](super::layer)). Reads report that comp.
@@ -10,11 +15,13 @@
 use crate::sys::*;
 
 use super::aegp_memory::handle_from_bytes;
+use super::footage;
 use super::layer::{Timeline, current_effect, item_handle};
 use crate::core::diagnostics::diag;
 
 const ITEM_NAME: &str = "aexlo";
 const COMP_TYPE_NAME: &[u8] = b"Composition\0";
+const FOOTAGE_TYPE_NAME: &[u8] = b"Footage\0";
 
 fn refuse(name: &str) -> A_Err {
 	log::warn!("AEGP_ItemSuite8/{name}: aexlo's project has one fixed comp");
@@ -50,6 +57,9 @@ unsafe extern "C" fn get_next_proj_item(
 	next_itemPH: *mut AEGP_ItemH,
 ) -> A_Err {
 	crate::core::ffi::guard("get_next_proj_item", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_next_proj_item");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetNextProjItem");
 		let Some(out) = (unsafe { next_itemPH.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -79,6 +89,9 @@ unsafe extern "C" fn get_active_item(itemPH: *mut AEGP_ItemH) -> A_Err {
 
 unsafe extern "C" fn is_item_selected(itemH: AEGP_ItemH, selectedPB: *mut A_Boolean) -> A_Err {
 	crate::core::ffi::guard("is_item_selected", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/is_item_selected");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_IsItemSelected");
 		let Some(out) = (unsafe { selectedPB.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -104,6 +117,10 @@ unsafe extern "C" fn get_item_type(itemH: AEGP_ItemH, item_typeP: *mut AEGP_Item
 		let Some(out) = (unsafe { item_typeP.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
 		};
+		if footage::decode_kind(itemH as _, footage::Kind::Item).is_some() {
+			*out = AEGP_ItemType_FOOTAGE as AEGP_ItemType;
+			return PF_Err_NONE;
+		}
 		if !known(itemH) {
 			return PF_Err_BAD_CALLBACK_PARAM;
 		}
@@ -120,6 +137,8 @@ unsafe extern "C" fn get_type_name(item_type: AEGP_ItemType, nameZ: *mut A_char)
 		}
 		let name: &[u8] = if item_type == AEGP_ItemType_COMP {
 			COMP_TYPE_NAME
+		} else if item_type == AEGP_ItemType_FOOTAGE as AEGP_ItemType {
+			FOOTAGE_TYPE_NAME
 		} else {
 			b"\0"
 		};
@@ -132,6 +151,9 @@ unsafe extern "C" fn get_type_name(item_type: AEGP_ItemType, nameZ: *mut A_char)
 /// char buffer. Suite 8 replaced this with a UTF-16 handle.
 unsafe extern "C" fn get_item_name_char(itemH: AEGP_ItemH, nameZ: *mut A_char) -> A_Err {
 	crate::core::ffi::guard("get_item_name_char", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_name_char");
+		}
 		diag!("AEGP_ItemSuite6/AEGP_GetItemName");
 		if nameZ.is_null() || !known(itemH) {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -172,14 +194,17 @@ unsafe extern "C" fn get_item_name(
 		let Some(out) = (unsafe { unicode_namePH.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
 		};
+		if let Some(item) = footage::decode_kind(itemH as _, footage::Kind::Item) {
+			let Some(name) = footage::item_name(item) else {
+				return PF_Err_BAD_CALLBACK_PARAM;
+			};
+			*out = handle_from_bytes(footage::utf16_bytes(&name));
+			return PF_Err_NONE;
+		}
 		if !known(itemH) {
 			return PF_Err_BAD_CALLBACK_PARAM;
 		}
-		let mut bytes = Vec::with_capacity((ITEM_NAME.len() + 1) * 2);
-		for unit in ITEM_NAME.encode_utf16().chain(std::iter::once(0)) {
-			bytes.extend_from_slice(&unit.to_le_bytes());
-		}
-		*out = handle_from_bytes(bytes);
+		*out = handle_from_bytes(footage::utf16_bytes(ITEM_NAME));
 		PF_Err_NONE
 	})
 }
@@ -197,6 +222,10 @@ unsafe extern "C" fn get_item_id(itemH: AEGP_ItemH, item_idPL: *mut A_long) -> A
 		let Some(out) = (unsafe { item_idPL.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
 		};
+		if let Some(item) = footage::decode_kind(itemH as _, footage::Kind::Item) {
+			*out = footage::item_id(item);
+			return PF_Err_NONE;
+		}
 		if !known(itemH) {
 			return PF_Err_BAD_CALLBACK_PARAM;
 		}
@@ -207,6 +236,9 @@ unsafe extern "C" fn get_item_id(itemH: AEGP_ItemH, item_idPL: *mut A_long) -> A
 
 unsafe extern "C" fn get_item_flags(itemH: AEGP_ItemH, item_flagsP: *mut AEGP_ItemFlags) -> A_Err {
 	crate::core::ffi::guard("get_item_flags", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_flags");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemFlags");
 		let Some(out) = (unsafe { item_flagsP.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -228,6 +260,9 @@ unsafe extern "C" fn set_item_use_proxy(_itemH: AEGP_ItemH, _use_proxyB: A_Boole
 
 unsafe extern "C" fn get_item_parent_folder(itemH: AEGP_ItemH, parent_folder_itemPH: *mut AEGP_ItemH) -> A_Err {
 	crate::core::ffi::guard("get_item_parent_folder", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_parent_folder");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemParentFolder");
 		let Some(out) = (unsafe { parent_folder_itemPH.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -249,6 +284,9 @@ unsafe extern "C" fn set_item_parent_folder(_itemH: AEGP_ItemH, _parent_folder_i
 
 unsafe extern "C" fn get_item_duration(itemH: AEGP_ItemH, durationPT: *mut A_Time) -> A_Err {
 	crate::core::ffi::guard("get_item_duration", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_duration");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemDuration");
 		let (Some(timeline), Some(out)) = (Timeline::of(itemH as _), unsafe { durationPT.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -260,6 +298,9 @@ unsafe extern "C" fn get_item_duration(itemH: AEGP_ItemH, durationPT: *mut A_Tim
 
 unsafe extern "C" fn get_item_current_time(itemH: AEGP_ItemH, curr_timePT: *mut A_Time) -> A_Err {
 	crate::core::ffi::guard("get_item_current_time", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_current_time");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemCurrentTime");
 		let (Some(timeline), Some(out)) = (Timeline::of(itemH as _), unsafe { curr_timePT.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -271,6 +312,9 @@ unsafe extern "C" fn get_item_current_time(itemH: AEGP_ItemH, curr_timePT: *mut 
 
 unsafe extern "C" fn get_item_dimensions(itemH: AEGP_ItemH, widthPL: *mut A_long, heightPL: *mut A_long) -> A_Err {
 	crate::core::ffi::guard("get_item_dimensions", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_dimensions");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemDimensions");
 		let Some(timeline) = Timeline::of(itemH as _) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -287,6 +331,9 @@ unsafe extern "C" fn get_item_dimensions(itemH: AEGP_ItemH, widthPL: *mut A_long
 
 unsafe extern "C" fn get_item_pixel_aspect_ratio(itemH: AEGP_ItemH, pix_aspect_ratioPRt: *mut A_Ratio) -> A_Err {
 	crate::core::ffi::guard("get_item_pixel_aspect_ratio", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_pixel_aspect_ratio");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemPixelAspectRatio");
 		let Some(out) = (unsafe { pix_aspect_ratioPRt.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -326,6 +373,9 @@ unsafe extern "C" fn set_item_current_time(_itemH: AEGP_ItemH, _new_timePT: *con
 
 unsafe extern "C" fn get_item_comment_length(itemH: AEGP_ItemH, buf_sizePLu: *mut A_u_long) -> A_Err {
 	crate::core::ffi::guard("get_item_comment_length", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_comment_length");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemCommentLength");
 		let Some(out) = (unsafe { buf_sizePLu.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -340,6 +390,9 @@ unsafe extern "C" fn get_item_comment_length(itemH: AEGP_ItemH, buf_sizePLu: *mu
 
 unsafe extern "C" fn get_item_comment(itemH: AEGP_ItemH, buf_sizeLu: A_u_long, commentZ: *mut A_char) -> A_Err {
 	crate::core::ffi::guard("get_item_comment", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_comment");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemComment");
 		if commentZ.is_null() || !known(itemH) {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -358,8 +411,37 @@ unsafe extern "C" fn set_item_comment(_itemH: AEGP_ItemH, _commentZ: *const A_ch
 	})
 }
 
+/// Suite 9 returns the comment as a UTF-16 handle instead of a length and a
+/// buffer. The comp has no comment.
+unsafe extern "C" fn get_item_comment_utf16(itemH: AEGP_ItemH, unicode_namePH: *mut AEGP_MemHandle) -> A_Err {
+	crate::core::ffi::guard("get_item_comment_utf16", || {
+		diag!("AEGP_ItemSuite9/AEGP_GetItemComment");
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite9/AEGP_GetItemComment");
+		}
+		let Some(out) = (unsafe { unicode_namePH.as_mut() }) else {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		};
+		if !known(itemH) {
+			return PF_Err_BAD_CALLBACK_PARAM;
+		}
+		*out = handle_from_bytes(footage::utf16_bytes(""));
+		PF_Err_NONE
+	})
+}
+
+unsafe extern "C" fn set_item_comment_utf16(_itemH: AEGP_ItemH, _commentZ: *const A_UTF16Char) -> A_Err {
+	crate::core::ffi::guard("set_item_comment_utf16", || {
+		diag!("AEGP_ItemSuite9/AEGP_SetItemComment");
+		refuse("AEGP_SetItemComment")
+	})
+}
+
 unsafe extern "C" fn get_item_label(itemH: AEGP_ItemH, labelP: *mut AEGP_LabelID) -> A_Err {
 	crate::core::ffi::guard("get_item_label", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_label");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemLabel");
 		let Some(out) = (unsafe { labelP.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -381,6 +463,9 @@ unsafe extern "C" fn set_item_label(_itemH: AEGP_ItemH, _label: AEGP_LabelID) ->
 
 unsafe extern "C" fn get_item_mru_view(itemH: AEGP_ItemH, mru_viewP: *mut AEGP_ItemViewP) -> A_Err {
 	crate::core::ffi::guard("get_item_mru_view", || {
+		if footage::is_handle(itemH as _) {
+			return footage::declined("AEGP_ItemSuite/get_item_mru_view");
+		}
 		diag!("AEGP_ItemSuite8/AEGP_GetItemMRUView");
 		let Some(out) = (unsafe { mru_viewP.as_mut() }) else {
 			return PF_Err_BAD_CALLBACK_PARAM;
@@ -450,6 +535,39 @@ pub const fn suite_8() -> AEGP_ItemSuite8 {
 		AEGP_GetItemCommentLength: Some(get_item_comment_length),
 		AEGP_GetItemComment: Some(get_item_comment),
 		AEGP_SetItemComment: Some(set_item_comment),
+		AEGP_GetItemLabel: Some(get_item_label),
+		AEGP_SetItemLabel: Some(set_item_label),
+		AEGP_GetItemMRUView: Some(get_item_mru_view),
+	}
+}
+
+/// Wire version 14. Differs from suite 8 only in the comment, which is a
+/// UTF-16 handle (no length call).
+pub const fn suite_9() -> AEGP_ItemSuite9 {
+	AEGP_ItemSuite9 {
+		AEGP_GetFirstProjItem: Some(get_first_proj_item),
+		AEGP_GetNextProjItem: Some(get_next_proj_item),
+		AEGP_GetActiveItem: Some(get_active_item),
+		AEGP_IsItemSelected: Some(is_item_selected),
+		AEGP_SelectItem: Some(select_item),
+		AEGP_GetItemType: Some(get_item_type),
+		AEGP_GetTypeName: Some(get_type_name),
+		AEGP_GetItemName: Some(get_item_name),
+		AEGP_SetItemName: Some(set_item_name),
+		AEGP_GetItemID: Some(get_item_id),
+		AEGP_GetItemFlags: Some(get_item_flags),
+		AEGP_SetItemUseProxy: Some(set_item_use_proxy),
+		AEGP_GetItemParentFolder: Some(get_item_parent_folder),
+		AEGP_SetItemParentFolder: Some(set_item_parent_folder),
+		AEGP_GetItemDuration: Some(get_item_duration),
+		AEGP_GetItemCurrentTime: Some(get_item_current_time),
+		AEGP_GetItemDimensions: Some(get_item_dimensions),
+		AEGP_GetItemPixelAspectRatio: Some(get_item_pixel_aspect_ratio),
+		AEGP_DeleteItem: Some(delete_item),
+		AEGP_CreateNewFolder: Some(create_new_folder),
+		AEGP_SetItemCurrentTime: Some(set_item_current_time),
+		AEGP_GetItemComment: Some(get_item_comment_utf16),
+		AEGP_SetItemComment: Some(set_item_comment_utf16),
 		AEGP_GetItemLabel: Some(get_item_label),
 		AEGP_SetItemLabel: Some(set_item_label),
 		AEGP_GetItemMRUView: Some(get_item_mru_view),

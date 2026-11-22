@@ -110,8 +110,9 @@ pub(crate) enum StreamValue {
 		green: f64,
 		blue: f64,
 	},
-	/// The layer chosen in a layer parameter; aexlo has no layer ids, so 0.
-	LayerId,
+	/// The layer chosen in a layer parameter: the id of the footage layer it is
+	/// linked to ([`footage`](super::footage)), else 0, no layer.
+	LayerId(AEGP_LayerIDVal),
 	/// An arbitrary-data parameter. The handle is the parameter's own value,
 	/// not a copy, so disposing the stream value must not free it.
 	Arb(PF_ArbitraryH),
@@ -122,7 +123,7 @@ impl StreamValue {
 		// SAFETY: every union read is selected by `param_type`.
 		unsafe {
 			match def.param_type {
-				t if t == PF_Param_LAYER as PF_ParamType => Self::LayerId,
+				t if t == PF_Param_LAYER as PF_ParamType => Self::LayerId(0),
 				t if t == PF_Param_SLIDER as PF_ParamType => Self::OneD(def.u.sd.value as f64),
 				t if t == PF_Param_FIX_SLIDER as PF_ParamType => {
 					Self::OneD(utils::fixed16_to_f32(def.u.fd.value) as f64)
@@ -173,7 +174,7 @@ impl StreamValue {
 			Self::ThreeD { spatial: true, .. } => AEGP_StreamType_ThreeD_SPATIAL,
 			Self::ThreeD { .. } => AEGP_StreamType_ThreeD,
 			Self::Color { .. } => AEGP_StreamType_COLOR,
-			Self::LayerId => AEGP_StreamType_LAYER_ID,
+			Self::LayerId(_) => AEGP_StreamType_LAYER_ID,
 			Self::Arb(_) => AEGP_StreamType_ARB,
 		}) as AEGP_StreamType
 	}
@@ -182,7 +183,7 @@ impl StreamValue {
 	pub(crate) fn dimensionality(self) -> A_short {
 		match self {
 			Self::NoData => 0,
-			Self::OneD(_) | Self::LayerId | Self::Arb(_) => 1,
+			Self::OneD(_) | Self::LayerId(_) | Self::Arb(_) => 1,
 			Self::TwoD { .. } => 2,
 			Self::ThreeD { .. } => 3,
 			Self::Color { .. } => 4,
@@ -222,7 +223,7 @@ macro_rules! write_val {
 					blueF: blue,
 				}
 			}
-			StreamValue::LayerId => out.layer_id = 0,
+			StreamValue::LayerId(id) => out.layer_id = id,
 			// `arbH` is bound as `A_Handle` (`*mut c_void`); the parameter stores
 			// a `PF_Handle` (`*mut *mut c_void`). The bit pattern is what the
 			// plugin casts back.
@@ -240,7 +241,12 @@ pub(crate) unsafe fn stream_value(streamH: AEGP_StreamRefH) -> Option<StreamValu
 	match stream.node {
 		Node::Param => {
 			let arb_live = arb_streams_live(stream.effect_ref);
-			with_param(stream.effect_ref, stream.index, |def| StreamValue::of(def, arb_live))
+			with_param(stream.effect_ref, stream.index, |def| StreamValue::of(def, arb_live)).map(|value| match value {
+				StreamValue::LayerId(_) => {
+					StreamValue::LayerId(super::footage::layer_id(stream.effect_ref, stream.index).unwrap_or(0))
+				}
+				other => other,
+			})
 		}
 		// Identity 2D transform: the anchor and the position sit on the layer
 		// centre, scale is 100%, rotation is 0 and opacity is fully on.
@@ -309,7 +315,7 @@ unsafe extern "C" fn get_valid_interpolations(
 		};
 		*out = match value {
 			StreamValue::NoData => AEGP_KeyInterpMask_NONE,
-			StreamValue::LayerId | StreamValue::Arb(_) => AEGP_KeyInterpMask_HOLD,
+			StreamValue::LayerId(_) | StreamValue::Arb(_) => AEGP_KeyInterpMask_HOLD,
 			_ => AEGP_KeyInterpMask_LINEAR | AEGP_KeyInterpMask_BEZIER | AEGP_KeyInterpMask_HOLD,
 		} as AEGP_KeyInterpolationMask;
 		PF_Err_NONE
