@@ -9,7 +9,8 @@
 //! falloff, color) and every edit reports through [`unsupported`].
 //!
 //! The mask's outline is not served here. A plugin reads it through
-//! `AEGP_GetNewMaskStream`, which the Stream Suite still refuses.
+//! `AEGP_GetNewMaskStream` (the Stream Suite) and the
+//! [Mask Outline Suite](super::mask_outline).
 
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -45,6 +46,22 @@ fn with_mask<T>(maskH: AEGP_MaskRefH, f: impl FnOnce(&crate::MaskPath) -> T) -> 
 	// SAFETY: the handle's effect is the live instance running the plugin call.
 	let instance = unsafe { instance.as_ref() };
 	instance.mask_paths().get(mask.index).map(f)
+}
+
+/// The effect and mask index behind a live mask handle, for the Stream Suite.
+pub(super) fn mask_ref_of(maskH: AEGP_MaskRefH) -> Option<(PF_ProgPtr, usize)> {
+	if !live().as_ref().is_some_and(|set| set.contains(&(maskH as usize))) {
+		return None;
+	}
+	// SAFETY: the address is in `LIVE`, so it is a `MaskRef` not yet disposed.
+	unsafe { (maskH as *const MaskRef).as_ref() }.map(|m| (m.effect_ref, m.index))
+}
+
+/// A copy of mask `index` on the effect behind `effect_ref`, if it exists.
+pub(super) fn mask_path_at(effect_ref: PF_ProgPtr, index: usize) -> Option<crate::MaskPath> {
+	let instance = PluginInstance::get_instance_ptr(effect_ref)?;
+	// SAFETY: `effect_ref` is the live instance running the plugin call.
+	unsafe { instance.as_ref() }.mask_paths().get(index).cloned()
 }
 
 fn declined(name: &str) -> A_Err {

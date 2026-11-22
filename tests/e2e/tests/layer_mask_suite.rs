@@ -35,7 +35,21 @@ mod slot {
 	pub const ROTO: usize = 5;
 	pub const DISPOSE_ERR: usize = 6;
 	pub const DOUBLE_DISPOSE_ERR: usize = 7;
-	pub const TOTAL: usize = MASK_BASE + MASK_STRIDE * 3;
+	pub const OUTLINE_BASE: usize = MASK_BASE + MASK_STRIDE * 3;
+	pub const OUTLINE_STRIDE: usize = 40;
+	pub const O_STREAM_ERR: usize = 0;
+	pub const O_OPACITY_STREAM_ERR: usize = 1;
+	pub const O_STREAM_TYPE: usize = 2;
+	pub const O_VALUE_ERR: usize = 3;
+	pub const O_OPEN: usize = 4;
+	pub const O_NUM_SEGMENTS: usize = 5;
+	pub const O_NUM_FEATHERS: usize = 6;
+	pub const O_PAST_END_ERR: usize = 7;
+	pub const O_DISPOSE_VALUE_ERR: usize = 8;
+	pub const O_DISPOSE_STREAM_ERR: usize = 9;
+	pub const O_VERTICES: usize = 10;
+	pub const VERTEX_STRIDE: usize = 6;
+	pub const TOTAL: usize = OUTLINE_BASE + OUTLINE_STRIDE * 3;
 }
 
 /// `PF_Err_INVALID_INDEX`, `PF_Err_BAD_CALLBACK_PARAM`.
@@ -113,6 +127,19 @@ fn report(masks: Vec<MaskPath>) -> Vec<u16> {
 	slots
 }
 
+/// The outline group the probe wrote for mask `i`.
+fn outline(slots: &[u16], i: usize) -> &[u16] {
+	let base = slot::OUTLINE_BASE + i * slot::OUTLINE_STRIDE;
+	&slots[base..base + slot::OUTLINE_STRIDE]
+}
+
+/// Vertex `v` of an outline group: `(error, x, y, tan_in_x, tan_out_x, tan_out_y)`.
+fn vertex(outline: &[u16], v: usize) -> (u16, f64, f64, f64, f64, f64) {
+	let base = slot::O_VERTICES + v * slot::VERTEX_STRIDE;
+	let px = |i: usize| (f64::from(outline[base + i]) - f64::from(0x8000)) / 16.0;
+	(outline[base], px(1), px(2), px(3), px(4), px(5))
+}
+
 /// What the probe read for mask `i`.
 fn mask(slots: &[u16], i: usize) -> [u16; 8] {
 	let base = slot::MASK_BASE + i * slot::MASK_STRIDE;
@@ -156,4 +183,78 @@ fn three_masks_keep_their_own_invert_mode_and_id_in_order() {
 	assert_eq!(mask(&s, 1), [0, 1, 3, 22, 0, 0, 0, ERR_BAD_CALLBACK_PARAM]);
 	assert_eq!(mask(&s, 2), [0, 0, 6, 33, 0, 0, 0, ERR_BAD_CALLBACK_PARAM]);
 	assert_eq!(s[slot::BY_INDEX_PAST_END_ERR], ERR_INVALID_INDEX);
+}
+
+/// A closed mask with real tangents, and an open one, travel through
+/// `AEGP_GetNewMaskStream` -> `AEGP_GetNewStreamValue` -> the Mask Outline Suite
+/// and arrive with the exact vertices that were attached.
+#[test]
+fn outlines_arrive_with_the_vertices_that_were_attached() {
+	let curved = MaskPath {
+		id: 1,
+		vertices: vec![
+			MaskVertex {
+				x: 10.5,
+				y: 20.25,
+				tan_in_x: -4.0,
+				tan_in_y: 6.0,
+				tan_out_x: 4.0,
+				tan_out_y: -6.0,
+			},
+			MaskVertex::corner(50.0, 12.0),
+			MaskVertex {
+				x: 33.0,
+				y: 44.75,
+				tan_in_x: 7.5,
+				tan_in_y: 0.0,
+				tan_out_x: -7.5,
+				tan_out_y: 0.0,
+			},
+		],
+		closed: true,
+		..Default::default()
+	};
+	let open = MaskPath {
+		id: 2,
+		vertices: vec![MaskVertex::corner(1.0, 2.0), MaskVertex::corner(60.0, 40.0)],
+		closed: false,
+		..Default::default()
+	};
+	let s = report(vec![curved.clone(), open]);
+
+	let o = outline(&s, 0);
+	assert_eq!(o[slot::O_STREAM_ERR], 0);
+	assert_eq!(o[slot::O_STREAM_TYPE], 11, "AEGP_StreamType_MASK");
+	assert_eq!(o[slot::O_VALUE_ERR], 0);
+	assert_eq!(o[slot::O_OPEN], 0);
+	assert_eq!(o[slot::O_NUM_SEGMENTS], 3);
+	assert_eq!(o[slot::O_NUM_FEATHERS], 0);
+	for (v, want) in curved.vertices.iter().enumerate() {
+		assert_eq!(
+			vertex(o, v),
+			(0, want.x, want.y, want.tan_in_x, want.tan_out_x, want.tan_out_y),
+			"vertex {v}"
+		);
+	}
+	// Segment 2 ends at vertex 3, which wraps to vertex 0.
+	assert_eq!(vertex(o, 3).1, 10.5);
+	assert_eq!(vertex(o, 3).2, 20.25);
+	assert_eq!(o[slot::O_PAST_END_ERR], ERR_INVALID_INDEX);
+	assert_eq!((o[slot::O_DISPOSE_VALUE_ERR], o[slot::O_DISPOSE_STREAM_ERR]), (0, 0));
+
+	let o = outline(&s, 1);
+	assert_eq!(o[slot::O_OPEN], 1);
+	assert_eq!(o[slot::O_NUM_SEGMENTS], 1);
+	assert_eq!(vertex(o, 0), (0, 1.0, 2.0, 0.0, 0.0, 0.0));
+	assert_eq!(vertex(o, 1), (0, 60.0, 40.0, 0.0, 0.0, 0.0));
+}
+
+/// A mask stream aexlo cannot answer from its mask model is refused (and
+/// reported as unsupported), not answered with an invented value.
+#[test]
+fn mask_streams_the_model_does_not_hold_are_refused() {
+	let s = report(vec![corner_mask(1, false, MaskMode::Add)]);
+	let o = outline(&s, 0);
+	assert_eq!(o[slot::O_STREAM_ERR], 0);
+	assert_ne!(o[slot::O_OPACITY_STREAM_ERR], 0);
 }

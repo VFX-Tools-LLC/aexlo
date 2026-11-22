@@ -108,6 +108,8 @@ fn parent_of(stream: Stream) -> Option<Stream> {
 		Node::Anchor | Node::Position | Node::Scale | Node::Rotation | Node::Opacity => (Node::Transform, 0),
 		Node::Effect => (Node::Effects, 1),
 		Node::Param => (Node::Effect, 0),
+		// Reached through the mask handle only; the mask parade lists no children.
+		Node::MaskOutline => (Node::Masks, 0),
 	};
 	Some(Stream {
 		effect_ref: stream.effect_ref,
@@ -121,7 +123,7 @@ fn depth(node: Node) -> A_long {
 		Node::Layer => 0,
 		Node::Transform | Node::Effects | Node::Masks => 1,
 		Node::Anchor | Node::Position | Node::Scale | Node::Rotation | Node::Opacity | Node::Effect => 2,
-		Node::Param => 3,
+		Node::Param | Node::MaskOutline => 3,
 	}
 }
 
@@ -156,6 +158,7 @@ fn name_bytes(stream: Stream) -> Vec<u8> {
 			}
 			return from_param;
 		}
+		Node::MaskOutline => b"ADBE Mask Shape",
 		Node::Param => return param_name(stream.effect_ref, stream.index),
 	};
 	fixed.to_vec()

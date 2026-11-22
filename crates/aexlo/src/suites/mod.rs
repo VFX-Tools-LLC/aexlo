@@ -68,6 +68,7 @@ pub mod iterate;
 mod keyframe;
 mod layer;
 mod layer_mask;
+mod mask_outline;
 pub(crate) use layer::enter_effect;
 pub mod param_utils;
 mod path;
@@ -198,6 +199,7 @@ pub static SUITE_CONTAINER: SuiteContainer = SuiteContainer {
 	layer8: layer::create_layer_suite_8(),
 	layer9: layer::create_layer_suite_9(),
 	layer_mask6: layer_mask::suite_6(),
+	mask_outline3: mask_outline::suite_3(),
 };
 
 /// Process-wide storage for the stateless suite vtables handed to plugins.
@@ -275,6 +277,7 @@ pub struct SuiteContainer {
 	pub layer8: AEGP_LayerSuite8,
 	pub layer9: AEGP_LayerSuite9,
 	pub layer_mask6: AEGP_MaskSuite6,
+	pub mask_outline3: AEGP_MaskOutlineSuite3,
 }
 
 /// Hand back a pointer to one of the shared [`SUITE_CONTAINER`] vtables.
@@ -510,6 +513,11 @@ pub unsafe extern "C" fn rusty_acquire_suite(name: *const i8, version: i32, suit
 		// The one Layer Mask Suite wire version aexlo serves is 7, `AEGP_MaskSuite6`.
 		("AEGP Layer Mask Suite", v) if v == kAEGPMaskSuiteVersion6 as i32 => {
 			dispatch_static!(suite, suite_name, version, layer_mask6)
+		}
+		// Wire version 5 is `AEGP_MaskOutlineSuite3`, the one the Layer Mask Suite
+		// pairs with.
+		("AEGP Mask Outline Suite", v) if v == kAEGPMaskOutlineSuiteVersion3 as i32 => {
+			dispatch_static!(suite, suite_name, version, mask_outline3)
 		}
 		("DRAWBOT Draw Suite", 1) => {
 			unsafe { *suite = &drawbot::DRAW_SUITE as *const _ as *const c_void };
