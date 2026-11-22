@@ -483,6 +483,20 @@ impl PluginInstance {
 	/// and return what strict mode found, including handles and worlds the
 	/// plugin never released ([`Strict::track_allocations`](crate::Strict)).
 	pub fn finish(mut self) -> crate::StrictReport {
+		self.set_down()
+	}
+
+	/// [`finish`](Self::finish) without unloading the plugin's library: the
+	/// plugin is set down and its strict report returned, but the library stays
+	/// mapped until `self` is dropped.
+	///
+	/// Dropping is what runs the library's `DLL_PROCESS_DETACH` and static
+	/// destructors, on the dropping thread and under the loader lock. A plugin
+	/// whose destructor waits for one of its own threads (a denoiser's worker
+	/// pool, say) never returns from there, because that thread cannot exit
+	/// while the loader lock is held. A caller that must not lose a result to
+	/// that drops the instance only after it has reported the result.
+	pub fn set_down(&mut self) -> crate::StrictReport {
 		self.teardown();
 		self.strict_report()
 	}

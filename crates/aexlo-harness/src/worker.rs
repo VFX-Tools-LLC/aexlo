@@ -35,6 +35,10 @@ pub const CANCEL_GRACE: Duration = Duration::from_secs(2);
 /// Extra time a load gets on top of a run's timeout.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// How long the client waits, after a response, for the worker to finish
+/// unloading the plugin before it replaces the worker.
+const UNLOAD_GRACE: Duration = Duration::from_secs(5);
+
 /// How long a worker may take to start (its `ready` event). Generous: the
 /// first launch of a freshly linked binary can be held up by the OS's code
 /// checks, and many launching at once queue behind each other.
@@ -297,6 +301,8 @@ pub fn serve() -> Result<()> {
 	}
 
 	let mut artifact: Option<PathBuf> = None;
+	// The instance of the request just answered, unloaded after its response.
+	let mut unload: Option<aexlo::PluginInstance> = None;
 	while let Ok(request) = rx.recv() {
 		let response = match request {
 			Request::Shutdown { id } => {
@@ -339,13 +345,15 @@ pub fn serve() -> Result<()> {
 					Err(response) => response,
 					Ok(Ok(fx)) => {
 						artifact = Some(path);
-						Response {
+						let response = Response {
 							id,
 							ok: true,
 							info: Some(PluginInfo::of(&fx)),
 							trace: Some(recorder.trace()),
 							..Response::default()
-						}
+						};
+						unload = Some(fx);
+						response
 					}
 					Ok(Err(e)) => failed(
 						id,
@@ -364,11 +372,23 @@ pub fn serve() -> Result<()> {
 				cancel.store(false, Ordering::Relaxed);
 				match &artifact {
 					None => failed(id, "harness", "run before load".into(), None),
-					Some(path) => run_request(id, path, &variant, &frame_out, &options, &send),
+					Some(path) => run_request(id, path, &variant, &frame_out, &options, &send, &mut unload),
 				}
 			}
 		};
 		send(json(&response));
+		// Only now unload the plugin: its library's exit-time code may never
+		// return (a destructor that waits for a thread of its own cannot finish
+		// under the loader lock), and the result is already out. The client
+		// waits a bounded time for `unloaded` and replaces a worker that does
+		// not send it.
+		drop(unload.take());
+		send(json(&Event {
+			id: response.id,
+			event: "unloaded".into(),
+			command: String::new(),
+			phase: String::new(),
+		}));
 	}
 	Ok(())
 }
@@ -406,6 +426,7 @@ fn run_request(
 	frame_out: &Path,
 	options: &RunOptions,
 	send: &(impl Fn(String) + Send + Sync + Clone + 'static),
+	unload: &mut Option<aexlo::PluginInstance>,
 ) -> Response {
 	let sink: CommandSink = {
 		let send = send.clone();
@@ -445,7 +466,9 @@ fn run_request(
 			);
 		}
 	};
-	let mut result = run_owned_prepared(fx, variant, options, Some(sink));
+	let (mut result, fx) = run_owned_prepared(fx, variant, options, Some(sink));
+	// Unloaded by the caller once the response is out.
+	*unload = Some(fx);
 	match &mut result {
 		Ok(output) => with_setup_gaps(&setup, &mut output.trace),
 		Err(failure) => {
@@ -768,6 +791,9 @@ impl WorkerClient {
 					}
 					match serde_json::from_value::<Response>(value) {
 						Ok(response) if response.id == id || response.id == 0 => {
+							if response.id == id {
+								self.await_unloaded(id);
+							}
 							return Waited::Response(Box::new(response));
 						}
 						Ok(_) => continue,
@@ -788,6 +814,36 @@ impl WorkerClient {
 				Err(RecvTimeoutError::Disconnected) => {
 					let (description, logs) = self.live.take().map(Live::reap).unwrap_or_default();
 					return Waited::Died(description, logs);
+				}
+			}
+		}
+	}
+
+	/// After the response to `id`: wait for the worker to say it has unloaded
+	/// the plugin. A plugin whose library never finishes unloading (a
+	/// destructor waiting for a thread of its own, which cannot exit under the
+	/// loader lock) leaves the worker stuck; the result is already in hand, so
+	/// the worker is killed and the next run gets a fresh one.
+	fn await_unloaded(&mut self, id: u64) {
+		let Some(live) = self.live.as_ref() else { return };
+		let deadline = Instant::now() + UNLOAD_GRACE;
+		loop {
+			let left = deadline.saturating_duration_since(Instant::now());
+			match live.lines.recv_timeout(left) {
+				Ok(line) => {
+					let unloaded =
+						serde_json::from_str::<Event>(&line).is_ok_and(|e| e.event == "unloaded" && e.id == id);
+					if unloaded {
+						return;
+					}
+				}
+				Err(RecvTimeoutError::Timeout) => {
+					let _ = self.live.take().map(Live::kill);
+					return;
+				}
+				Err(RecvTimeoutError::Disconnected) => {
+					let _ = self.live.take().map(Live::reap);
+					return;
 				}
 			}
 		}
@@ -833,6 +889,13 @@ impl WorkerClient {
 			Waited::Response(response) if response.ok => {
 				let info = response.info.unwrap_or_default();
 				let mut trace = response.trace.unwrap_or_default();
+				// The worker that answered may have been replaced because it
+				// could not unload the plugin; a fresh one serves the runs
+				// (each run loads the plugin itself).
+				if self.live.is_none() {
+					self.live =
+						Some(Live::spawn(&self.command).map_err(|e| RunFailure::Harness { message: e.message })?);
+				}
 				if let Some(live) = self.live.as_mut() {
 					trace.logs = live.take_logs();
 					live.loaded = Some((artifact.to_path_buf(), info.clone(), trace.clone()));

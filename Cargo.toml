@@ -10,6 +10,7 @@ members = [
   "examples/plugins/*",
   "tests/e2e",
   "tests/hang_on_exit",
+  "tests/hang_on_unload",
   "tests/misbehave",
   "tests/probe_footage",
   "tests/probe_masks",

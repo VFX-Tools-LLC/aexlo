@@ -1,0 +1,15 @@
+[package]
+name = "aexlo_hang_on_unload"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "An effect whose DLL hangs when the host unloads it, for testing aexlo's unload path"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+after-effects-sys = { workspace = true }

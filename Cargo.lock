@@ -259,6 +259,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "aexlo_hang_on_unload"
+version = "0.2.0"
+dependencies = [
+ "after-effects-sys",
+]
+
+[[package]]
 name = "aexlo_misbehave"
 version = "0.2.0"
 dependencies = [
