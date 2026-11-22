@@ -9,6 +9,7 @@ members = [
   "examples/studio",
   "examples/plugins/*",
   "tests/e2e",
+  "tests/hang_on_exit",
   "tests/misbehave",
   "playground/probe",
   "playground/harness",

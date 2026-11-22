@@ -93,26 +93,36 @@ pub fn outcomes(report: &serde_json::Value) -> Vec<(String, String)> {
 
 /// Build the misbehaving effect and return its dynamic library.
 pub fn misbehave_artifact() -> PathBuf {
+	cdylib_artifact("aexlo_misbehave")
+}
+
+/// Build the effect whose library hangs at process exit (`tests/hang_on_exit`).
+pub fn hang_on_exit_artifact() -> PathBuf {
+	cdylib_artifact("aexlo_hang_on_exit")
+}
+
+/// Build the cdylib package `package` and return a private copy of its library.
+fn cdylib_artifact(package: &str) -> PathBuf {
 	let status = std::process::Command::new(env!("CARGO"))
-		.args(["build", "-q", "-p", "aexlo_misbehave"])
+		.args(["build", "-q", "-p", package])
 		.current_dir(workspace())
 		.status()
 		.expect("running cargo build");
-	assert!(status.success(), "building aexlo_misbehave");
+	assert!(status.success(), "building {package}");
 	let name = if cfg!(target_os = "windows") {
-		"aexlo_misbehave.dll"
+		format!("{package}.dll")
 	} else if cfg!(target_os = "macos") {
-		"libaexlo_misbehave.dylib"
+		format!("lib{package}.dylib")
 	} else {
-		"libaexlo_misbehave.so"
+		format!("lib{package}.so")
 	};
 	// Copy it away: cargo re-links target/debug outputs on every build, and
 	// other tests build the same crate concurrently. Each call gets a
 	// directory of its own, since `scratch` empties the one it is given.
 	static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 	let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-	let built = workspace().join("target/debug").join(name);
-	let copy = scratch(&format!("misbehave_artifact/{}-{call}", std::process::id())).join(name);
+	let built = workspace().join("target/debug").join(&name);
+	let copy = scratch(&format!("{package}_artifact/{}-{call}", std::process::id())).join(&name);
 	for _ in 0..50 {
 		if std::fs::copy(&built, &copy).is_ok() {
 			return copy;
