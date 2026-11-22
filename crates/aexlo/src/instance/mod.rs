@@ -543,6 +543,11 @@ impl PluginInstance {
 		Some(unsafe { std::slice::from_raw_parts(data.add(offset), len) }.to_vec())
 	}
 
+	/// The `sequence_data` handle the plugin allocated, or null before it has.
+	pub(crate) fn sequence_data_handle(&self) -> crate::sys::PF_Handle {
+		self.effect_state.handles().1
+	}
+
 	/// The host-side state carried between commands, and what the plugin
 	/// returned in `PF_OutData` from the last one.
 	pub fn state(&self) -> InstanceState {

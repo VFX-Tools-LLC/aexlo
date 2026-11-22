@@ -57,6 +57,7 @@ pub(crate) mod drawbot;
 pub(crate) use drawbot::system_font;
 mod dynamic_stream;
 mod effect;
+mod effect_sequence_data;
 mod effect_ui;
 mod ffi;
 pub mod fill_matte;
@@ -203,6 +204,7 @@ pub static SUITE_CONTAINER: SuiteContainer = SuiteContainer {
 	layer9: layer::create_layer_suite_9(),
 	layer_mask6: layer_mask::suite_6(),
 	mask_outline3: mask_outline::suite_3(),
+	effect_sequence_data: effect_sequence_data::suite_1(),
 };
 
 /// Process-wide storage for the stateless suite vtables handed to plugins.
@@ -281,6 +283,7 @@ pub struct SuiteContainer {
 	pub layer9: AEGP_LayerSuite9,
 	pub layer_mask6: AEGP_MaskSuite6,
 	pub mask_outline3: AEGP_MaskOutlineSuite3,
+	pub effect_sequence_data: PF_EffectSequenceDataSuite1,
 }
 
 /// Hand back a pointer to one of the shared [`SUITE_CONTAINER`] vtables.
@@ -383,6 +386,9 @@ pub unsafe extern "C" fn rusty_acquire_suite(name: *const i8, version: i32, suit
 		("PF AE Adv Time Suite", 4) => dispatch_static!(suite, suite_name, version, adv_time4),
 		("AE Plugin Helper Suite", 1) => dispatch_static!(suite, suite_name, version, helper1),
 		("AE Plugin Helper Suite2", 1..=2) => dispatch_static!(suite, suite_name, version, helper2),
+		("PF Effect Sequence Data Suite", 1) => {
+			dispatch_static!(suite, suite_name, version, effect_sequence_data)
+		}
 		("PF GPU Device Suite", 1) => dispatch_static!(suite, suite_name, version, gpu_device),
 		// ParamUtils suites are append-only, so the v3 table also satisfies v1/v2 requests.
 		("PF Param Utils Suite", 1..=3) => dispatch_static!(suite, suite_name, version, param_utils),

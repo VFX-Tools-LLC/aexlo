@@ -156,7 +156,7 @@ aexlo compat fixtures/plugins/macos --baseline compat.json   # 悪化があれ�
 
 ## 実装の進捗
 
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣀ 89% (32/36)
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣀ 92% (33/36)
 
 > ○ 実装済み / △ 一部実装 / × 未実装
 
@@ -172,7 +172,7 @@ aexlo compat fixtures/plugins/macos --baseline compat.json   # 悪化があれ�
 | ○ Iterate8         | ○ Path Data                      |                   |                   |
 | ○ Iterate16        | ○ Path Query                     |                   |                   |
 | ○ IterateFloat     | ○ PointParam                     |                   |                   |
-| ○ Pixel Data       | × Effect Sequence Data           |                   |                   |
+| ○ Pixel Data       | ○ Effect Sequence Data           |                   |                   |
 | ○ Pixel Format     |                                  |                   |                   |
 | ○ Sampling8        |                                  |                   |                   |
 | ○ Sampling16       |                                  |                   |                   |

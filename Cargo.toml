@@ -13,6 +13,7 @@ members = [
   "tests/misbehave",
   "tests/probe_footage",
   "tests/probe_masks",
+  "tests/probe_sequence",
   "playground/probe",
   "playground/harness",
 ]

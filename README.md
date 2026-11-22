@@ -178,7 +178,7 @@ See [docs/compat.md](https://github.com/potistudio/aexlo/blob/master/docs/compat
 
 ## Implementation Progress
 
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣀ 89% (32/36)
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣀ 92% (33/36)
 
 > ○ fully implemented / △ only partially implemented / × not implemented
 
@@ -194,7 +194,7 @@ See [docs/compat.md](https://github.com/potistudio/aexlo/blob/master/docs/compat
 | ○ Iterate8         | ○ Path Data                      |                   |                   |
 | ○ Iterate16        | ○ Path Query                     |                   |                   |
 | ○ IterateFloat     | ○ PointParam                     |                   |                   |
-| ○ Pixel Data       | × Effect Sequence Data           |                   |                   |
+| ○ Pixel Data       | ○ Effect Sequence Data           |                   |                   |
 | ○ Pixel Format     |                                  |                   |                   |
 | ○ Sampling8        |                                  |                   |                   |
 | ○ Sampling16       |                                  |                   |                   |

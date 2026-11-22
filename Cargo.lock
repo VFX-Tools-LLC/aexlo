@@ -280,6 +280,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "aexlo_probe_sequence"
+version = "0.2.0"
+dependencies = [
+ "after-effects-sys",
+]
+
+[[package]]
 name = "after-effects"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
