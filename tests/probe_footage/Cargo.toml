@@ -1,0 +1,15 @@
+[package]
+name = "aexlo_probe_footage"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "A test effect that resolves a Layer parameter to a footage file path and reports what it found"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+after-effects-sys = { workspace = true }
