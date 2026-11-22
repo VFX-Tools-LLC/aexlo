@@ -258,6 +258,11 @@ pub struct InputSpec {
 	/// installed with the system by default.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub font: Option<PathBuf>,
+	/// `layers` only: link the layer parameter to a footage item whose file is
+	/// this path (a LUT, a CLF, any data file), instead of giving it pixels.
+	/// The plugin reads the path through the Footage Suite.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub footage: Option<PathBuf>,
 }
 
 impl InputSpec {
@@ -278,6 +283,9 @@ impl InputSpec {
 
 	/// The generator, `gradient` when no path, generator or text is given.
 	pub fn generator(&self) -> Option<Generator> {
+		if self.footage.is_some() {
+			return None;
+		}
 		match (&self.path, &self.text, self.generate) {
 			(Some(_), _, _) | (None, Some(_), _) => None,
 			(None, None, generator) => Some(generator.unwrap_or(Generator::Gradient)),
@@ -290,6 +298,18 @@ impl InputSpec {
 
 	/// Reject contradictory or meaningless keys.
 	pub fn validate(&self) -> Result<()> {
+		if self.footage.is_some() {
+			let others = InputSpec {
+				footage: None,
+				..self.clone()
+			};
+			if others != InputSpec::default() {
+				return Err(Error::invalid(
+					"input: `footage` links a layer parameter to a file and takes no other key",
+				));
+			}
+			return Ok(());
+		}
 		let sources = [self.path.is_some(), self.generate.is_some(), self.text.is_some()];
 		if sources.iter().filter(|&&given| given).count() > 1 {
 			return Err(Error::invalid(
@@ -328,7 +348,10 @@ impl InputSpec {
 
 	/// Resolve a relative `path` against `dir`.
 	pub fn resolve_paths(&mut self, dir: &Path) {
-		for path in [&mut self.path, &mut self.font].into_iter().flatten() {
+		for path in [&mut self.path, &mut self.font, &mut self.footage]
+			.into_iter()
+			.flatten()
+		{
 			if path.is_relative() {
 				*path = dir.join(&*path);
 			}
@@ -612,6 +635,35 @@ pub fn file_safe(text: &str) -> String {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn footage_is_a_layer_source_of_its_own() {
+		let spec = InputSpec {
+			footage: Some("x.cube".into()),
+			..InputSpec::default()
+		};
+		assert!(spec.validate().is_ok());
+		assert_eq!(spec.generator(), None);
+		for other in [
+			InputSpec {
+				path: Some("a.png".into()),
+				..spec.clone()
+			},
+			InputSpec {
+				generate: Some(Generator::Solid),
+				..spec.clone()
+			},
+			InputSpec {
+				color: Some(vec![1.0, 1.0, 1.0]),
+				..spec.clone()
+			},
+		] {
+			assert!(other.validate().is_err());
+		}
+		let mut spec = spec;
+		spec.resolve_paths(Path::new("/m"));
+		assert_eq!(spec.footage, Some(Path::new("/m").join("x.cube")));
+	}
 
 	#[test]
 	fn fps_reduces_to_lowest_terms() {

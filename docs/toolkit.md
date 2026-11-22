@@ -200,6 +200,21 @@ paragraph, as large as fits, and the layer's pixels are the text in `color`
 or OpenType file, relative to the manifest; a sans-serif face installed with
 the system by default. Only `input` takes `text`, not `layers`.
 
+A `layers` entry can instead link its layer parameter to a footage file, as a
+project item imported from disk:
+
+```toml
+layers = { "LUT File" = { footage = "luts/film.cube" } }   # relative to the manifest
+```
+
+`footage` takes no other key and gives the layer no pixels. The plugin finds
+the file as it would in After Effects (the parameter's layer id, then
+`AEGP_GetLayerSourceItem`, Item Suite `AEGP_GetItemType`, Footage Suite
+`AEGP_GetMainFootageFromItem` and `AEGP_GetFootagePath`), which is how plugins
+that load a LUT or other data file read it. The file need not exist, so a
+plugin's missing-file path can be run too. It is `set_layer_param_footage_path`
+in the API; only `layers` takes `footage`, not `input`.
+
 ### 4.6 Params
 
 Keys name a parameter by its declared name (case-insensitive, matching

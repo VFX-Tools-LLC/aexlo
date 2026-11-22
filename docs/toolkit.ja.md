@@ -174,6 +174,14 @@ input = { text = "Title\nline 2", color = [1, 1, 1], font = "fonts/Inter.ttf" }
 
 `text` は `aexlo inspect --text` と同じく、エフェクトのレイヤーをテキストレイヤーにします（[inspect.ja.md](inspect.ja.md#テキストレイヤー)）。文字列は中央揃えの段落として収まる最大の大きさで組まれ、レイヤーのピクセルは透明の上に `color`（既定は白）で描いたテキストになります。`\n` で改行します。`font` は TrueType または OpenType のファイルで、マニフェストからの相対パスです。既定はシステムにインストールされたサンセリフ体です。`text` を取るのは `input` だけで、`layers` には使えません。
 
+`layers` のエントリーは、レイヤーパラメーターをディスク上のフッテージファイル（プロジェクトに読み込んだアイテム）にリンクすることもできます。
+
+```toml
+layers = { "LUT File" = { footage = "luts/film.cube" } }   # マニフェストからの相対パス
+```
+
+`footage` は他のキーを取らず、レイヤーにピクセルは与えません。プラグインは After Effects と同じ経路（パラメーターのレイヤー ID、`AEGP_GetLayerSourceItem`、Item Suite の `AEGP_GetItemType`、Footage Suite の `AEGP_GetMainFootageFromItem` と `AEGP_GetFootagePath`）でファイルを見つけます。LUT などのデータファイルを読むプラグインが使う経路です。ファイルが存在しなくてもよいので、プラグインのファイル欠落時の処理も実行できます。API では `set_layer_param_footage_path` です。`footage` を取るのは `layers` だけで、`input` には使えません。
+
 ### 4.6 パラメーター
 
 キーには宣言されたパラメーター名（大文字小文字を区別せず、現在の `aexlo-bench` と同じ照合）または `"#24"` のようなインデックスを指定します。複数のパラメーターに一致する名前はエラーとなり、候補のインデックスを一覧表示します。

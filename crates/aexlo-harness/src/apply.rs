@@ -85,6 +85,11 @@ pub fn configure_prepared(fx: &mut PluginInstance, variant: &Variant) -> Result<
 				"layer '{key}': parameter #{index} is not a layer"
 			)));
 		}
+		if let Some(path) = &spec.footage {
+			fx.set_layer_param_footage_path(index, Some(path))
+				.map_err(|e| Error::invalid(format!("layer '{key}': {e}")))?;
+			continue;
+		}
 		let layer = input::build(spec, depth, Some((w, h))).map_err(|e| e.context(format!("layer '{key}'")))?;
 		set_layer_param(fx, index, layer)?;
 	}

@@ -18,6 +18,11 @@ pub const DEFAULT_SIZE: (u32, u32) = (1920, 1080);
 /// `fit` is `stretch`.
 pub fn build(spec: &InputSpec, depth: PixelDepthKind, size: Option<(u32, u32)>) -> Result<AnyLayer> {
 	spec.validate()?;
+	if spec.footage.is_some() {
+		return Err(Error::invalid(
+			"input: `footage` only applies to a layer parameter (`layers`), not to an input",
+		));
+	}
 	if let Some(path) = &spec.path {
 		let mut layer = load_image(path).map_err(|e| Error::invalid(e.message))?;
 		if let Some((w, h)) = size
@@ -201,6 +206,17 @@ mod tests {
 		// The middle of the H's left stem, where its outline says it is.
 		let stem = text.outlines()[0].vertices.iter().map(|v| v.x).fold(f64::MAX, f64::min);
 		assert_eq!(at(stem + 1.5, (t + b) / 2.0)[3], 1.0);
+	}
+
+	#[test]
+	fn footage_is_for_layer_parameters_not_inputs() {
+		let spec = InputSpec {
+			footage: Some("x.cube".into()),
+			..InputSpec::default()
+		};
+		let err = build(&spec, PixelDepthKind::U8, None).unwrap_err();
+		assert_eq!(err.kind, crate::ErrorKind::Invalid);
+		assert!(err.message.contains("footage"), "{err}");
 	}
 
 	#[test]
