@@ -417,6 +417,11 @@ unsafe extern "C" fn get_new_mask_stream(
 			return PF_Err_BAD_CALLBACK_PARAM;
 		};
 		if which_stream != AEGP_MaskStream_OUTLINE as AEGP_MaskStream {
+			crate::observe::unsupported(
+				crate::observe::UnsupportedKind::Declined,
+				"AEGP_StreamSuite/AEGP_GetNewMaskStream",
+				format!("which_stream={which_stream}"),
+			);
 			return unsupported("AEGP_GetNewMaskStream (only the outline stream)");
 		}
 		*out = new_stream_handle(Stream {

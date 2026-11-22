@@ -87,7 +87,7 @@ fn probe_path() -> &'static PathBuf {
 					.map(|f| f.trim().trim_matches('"').replace("\\\\", "\\"))
 					.find(|f| f.ends_with(".dll") || f.ends_with(".dylib") || f.ends_with(".so"))
 			})
-			.last()
+			.next_back()
 			.map(PathBuf::from)
 			.expect("no cdylib among the probe's build artifacts")
 	})
