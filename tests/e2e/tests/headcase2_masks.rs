@@ -85,6 +85,10 @@ fn masks() -> Vec<MaskPath> {
 
 /// Smart-render Headcase 2 with `masks` on its layer and return the trace.
 fn run(masks: Vec<MaskPath>) -> Option<Trace> {
+	// Two Headcase 2 instances alive at once in one process crash it now and then
+	// (about 1 run in 50, in the plugin's own static state), so the tests take turns.
+	static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+	let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
 	let path = plugin()?;
 	let mut instance = aexlo::Host::get().load(&path).expect("loading Headcase 2");
 	let trace = Arc::new(Trace::default());
